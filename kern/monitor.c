@@ -10,6 +10,7 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -24,7 +25,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
-	{ "backtrace", "Display backtrace information", mon_backtrace}
+	{ "backtrace", "Display backtrace information", mon_backtrace},
+	{ "showmappings", "Display page maps", mon_page}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -90,7 +92,59 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int mon_page(int argc, char** argv, struct Trapframe* tf) {
+	uintptr_t va;
+	physaddr_t pa, old_pa;
+	size_t size;
+	pte_t *pte;
+	if (strcmp(argv[0], "showmappings") == 0) {
+		size = 0;
+		old_pa = 0;
+		for (va = 0; true; va += PGSIZE) {
+			pte = pgdir_walk(kern_pgdir, (void *) va, false);
+			if (pte && ((*pte) & PTE_P) && (PDX(va) != PDX(UVPT))) {
+				pa = PTE_ADDR(*pte);
+				if (pa != old_pa + PGSIZE && size) {
+					cprintf("virtual address: %08x - %08x   ",
+						va-size,
+						va);
+					cprintf("physical address: %08x - %08x\n",
+						old_pa - size + PGSIZE,
+						old_pa + PGSIZE);
+					size = 0;
+				}
+				size += PGSIZE;
+				old_pa = pa;
+			}
+			else {
+				if (size) {
+					cprintf("virtual address: %08x - %08x   ",
+						va-size,
+						va, size);
+					cprintf("physical address: %08x - %08x\n",
+						pa-size,
+						pa);
+				}
+				size = 0;
+				old_pa = 0;
+			}
+			if (~0u - va <= PGSIZE) {
+				if (size) {
+					cprintf("virtual address: %08x - %08x   ",
+						va - size + PGSIZE,
+						va + PGSIZE);
+					cprintf("physical address: %08x - %08x\n",
+						pa - size + PGSIZE,
+						pa + PGSIZE);
+					size = 0;
+				}
+				break;
+			}
+		}
+	}
 
+	return 0;
+}
 
 /***** Kernel monitor command interpreter *****/
 

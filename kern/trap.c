@@ -58,6 +58,27 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void trap_handler0();
+void trap_handler1();
+void trap_handler2();
+void trap_handler3();
+void trap_handler4();
+void trap_handler5();
+void trap_handler6();
+void trap_handler7();
+void trap_handler8();
+void trap_handler9();
+void trap_handler10();
+void trap_handler11();
+void trap_handler12();
+void trap_handler13();
+void trap_handler14();
+void trap_handler15();
+void trap_handler16();
+void trap_handler17();
+void trap_handler18();
+void trap_handler19();
+void trap_handler_sys();
 
 void
 trap_init(void)
@@ -65,6 +86,29 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+
+	SETGATE(idt[T_DIVIDE], false, GD_KT, trap_handler0, 0);
+	SETGATE(idt[T_DEBUG], false, GD_KT, trap_handler1, 0);
+	SETGATE(idt[T_NMI], false, GD_KT, trap_handler2, 0);
+	SETGATE(idt[T_BRKPT], false, GD_KT, trap_handler3, 3);
+	SETGATE(idt[T_OFLOW], false, GD_KT, trap_handler4, 0);
+	SETGATE(idt[T_BOUND], false, GD_KT, trap_handler5, 0);
+	SETGATE(idt[T_ILLOP], false, GD_KT, trap_handler6, 0);
+	SETGATE(idt[T_DEVICE], false, GD_KT, trap_handler7, 0);
+	SETGATE(idt[T_DBLFLT], false, GD_KT, trap_handler8, 0);
+	SETGATE(idt[T_COPROC], false, GD_KT, trap_handler9, 0);
+	SETGATE(idt[T_TSS], false, GD_KT, trap_handler10, 0);
+	SETGATE(idt[T_SEGNP], false, GD_KT, trap_handler11, 0);
+	SETGATE(idt[T_STACK], false, GD_KT, trap_handler12, 0);
+	SETGATE(idt[T_GPFLT], false, GD_KT, trap_handler13, 0);
+	SETGATE(idt[T_PGFLT], false, GD_KT, trap_handler14, 0);
+	SETGATE(idt[T_RES], false, GD_KT, trap_handler15, 0);
+	SETGATE(idt[T_FPERR], false, GD_KT, trap_handler16, 0);
+	SETGATE(idt[T_ALIGN], false, GD_KT, trap_handler17, 0);
+	SETGATE(idt[T_MCHK], false, GD_KT, trap_handler18, 0);
+	SETGATE(idt[T_SIMDERR], false, GD_KT, trap_handler19, 0);
+
+	SETGATE(idt[T_SYSCALL], false, GD_KT, trap_handler_sys, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -144,6 +188,34 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
+	uint32_t syscallno, a1, a2, a3, a4, a5;
+
+	if (tf->tf_trapno == T_PGFLT) {
+		if (tf->tf_cs & 3) {
+			page_fault_handler(tf);
+		}
+		else {
+			panic("Page fault in kernel mode");
+		}
+		return;
+	}
+
+	if (tf->tf_trapno == T_BRKPT) {
+		monitor(tf);
+		return;
+	}
+	
+	if (tf->tf_trapno == T_SYSCALL) {
+		syscallno = tf->tf_regs.reg_eax;
+		a1 = tf->tf_regs.reg_edx;
+		a2 = tf->tf_regs.reg_ecx;
+		a3 = tf->tf_regs.reg_ebx;
+		a4 = tf->tf_regs.reg_edi;
+		a5 = tf->tf_regs.reg_esi;
+
+		tf->tf_regs.reg_eax = syscall(syscallno, a1, a2, a3, a4, a5);
+		return;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)

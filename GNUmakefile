@@ -153,7 +153,7 @@ QEMUOPTS += $(QEMUEXTRA)
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
 gdb:
-	gdb -n -x .gdbinit
+	$(GCCPREFIX)gdb -n -x .gdbinit
 
 pre-qemu: .gdbinit
 

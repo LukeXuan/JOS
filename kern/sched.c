@@ -30,6 +30,36 @@ sched_yield(void)
 
 	// LAB 4: Your code here.
 
+	size_t i;
+	size_t start, end;
+
+	idle = NULL;
+
+	if (curenv) {
+		start = (ENVX(curenv->env_id) + 1) % NENV;
+		end = ENVX(curenv->env_id);
+		for (i = start; i != end; i = (i + 1) % NENV) {
+			if (envs[i].env_status == ENV_RUNNABLE) {
+				idle = envs + i;
+			}
+		}
+	}
+	else {
+		for (i = 0; i < NENV; ++ i) {
+			if (envs[i].env_status == ENV_RUNNABLE) {
+				idle = envs + i;
+			}
+		}
+	}
+
+	if (! idle && curenv && curenv->env_status == ENV_RUNNING) {
+		idle = curenv;
+	}
+
+	if (idle) {
+		env_run(idle);
+	}
+
 	// sched_halt never returns
 	sched_halt();
 }
@@ -50,6 +80,7 @@ sched_halt(void)
 		     envs[i].env_status == ENV_DYING))
 			break;
 	}
+
 	if (i == NENV) {
 		cprintf("No runnable environments in the system!\n");
 		while (1)

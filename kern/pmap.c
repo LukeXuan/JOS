@@ -224,9 +224,10 @@ mem_init(void)
 	// Your code goes here:
 
         // The lower part is automatically generated as the pgdir_walk does
-	
-	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE,
-			PADDR(bootstack), PTE_W | PTE_P);
+
+	// No longer needed
+	/* boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, */
+	/* 		PADDR(bootstack), PTE_W | PTE_P); */
 	
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -289,6 +290,14 @@ mem_init_mp(void)
 	//
 	// LAB 4: Your code here:
 
+	size_t i;
+	for (i = 0; i < NCPU; ++ i) {
+		boot_map_region(kern_pgdir,
+				KSTACKTOP - (KSTKSIZE + KSTKGAP) * i - KSTKSIZE,
+				KSTKSIZE,
+				(physaddr_t) PADDR(percpu_kstacks[i]),
+				PTE_W | PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -334,6 +343,9 @@ page_init(void)
 			continue;
 		}
 		else if (i*PGSIZE >= IOPHYSMEM && i*PGSIZE < free) {
+			continue;
+		}
+		else if (i*PGSIZE == MPENTRY_PADDR) {
 			continue;
 		}
 		pages[i].pp_ref = 0;
@@ -471,10 +483,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 		if (! pte) {
 			panic("pgdir_walk failed to allocate");
 		}
-		if (0xef7ec000 == va) {
-			cprintf("va: %08x, pa: %08x, pte: %08x\n", va + offset, pa + offset, pte);
-		}
-		
+
 		*pte = (pa + offset) | perm | PTE_P;
 	}
 }
@@ -625,7 +634,27 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+
+	physaddr_t from;
+	uintptr_t ret;
+
+	// We should map from the round down of the physical address
+
+	from = ROUNDDOWN(pa, PGSIZE);
+	
+	size = ROUNDUP(pa + size - from, PGSIZE);
+
+	if (size + base > MMIOLIM) {
+		panic("Not enough memory for MMIO");
+	}
+
+	boot_map_region(kern_pgdir, base, size, from, PTE_W | PTE_PCD | PTE_PWT);
+
+	ret = (pa - from) + base;
+
+	base += size;
+
+	return (void *) ret;
 }
 
 static uintptr_t user_mem_check_addr;

@@ -687,9 +687,9 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	uint32_t uperm = perm | PTE_P;
 
 	from = (uintptr_t) ROUNDDOWN(va, PGSIZE);
-	to = (uintptr_t) ROUNDDOWN(va + len, PGSIZE);
+	to = (uintptr_t) va + len;
 
-	for (n = 0; from + n <= to; n += PGSIZE) {
+	for (n = 0; from + n < to; n += PGSIZE) {
 		pde_t pde = env->env_pgdir[PDX(from + n)];
 		if ((pde & uperm) != uperm) {
 			if ((uintptr_t) va > from + n) {

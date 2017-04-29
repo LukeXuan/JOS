@@ -375,7 +375,54 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	struct Env *denv;
+	struct PageInfo *p;
+	pte_t *pte;
+	int r;
+
+	if ((r = envid2env(envid, &denv, 0)) < 0) {
+		return r;
+	}
+
+	if (! denv->env_ipc_recving) {
+		return -E_IPC_NOT_RECV;
+	}
+
+	if ((uintptr_t) srcva < UTOP) {
+		if ((uintptr_t)srcva & 0xFF) {
+			return -E_INVAL;
+		}
+		if (((PTE_U | PTE_P) & perm) != (PTE_U | PTE_P) ||
+		    ((~ PTE_SYSCALL) & perm)) {
+			return -E_INVAL;
+		}
+		if ((p = page_lookup(curenv->env_pgdir, srcva, &pte)) == 0) {
+			return -E_INVAL;
+		}
+		if ((perm & PTE_W) && (! (*pte & PTE_W))) {
+			return -E_INVAL;
+		}
+	}
+	denv->env_ipc_recving = false;
+	denv->env_ipc_value = value;
+	denv->env_ipc_from = curenv->env_id;
+
+	if ((uintptr_t)denv->env_ipc_dstva < UTOP && (uintptr_t)srcva < UTOP) {
+		denv->env_ipc_perm = perm;
+		if (page_insert(denv->env_pgdir, p, denv->env_ipc_dstva, perm)) {
+			// Restore denv status
+			denv->env_ipc_recving = true;
+			return -E_NO_MEM;
+		}
+	}
+	else {
+		denv->env_ipc_perm = 0;
+	}
+
+	denv->env_status = ENV_RUNNABLE;
+	denv->env_tf.tf_regs.reg_eax = 0;
+
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -393,7 +440,16 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	if (((uintptr_t) dstva < UTOP) && ((uintptr_t) dstva & 0xFF)) {
+		return -E_INVAL;
+	}
+	curenv->env_ipc_recving = true;
+	curenv->env_ipc_dstva = dstva;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+
+	sys_yield();
+
+	panic("ipc recv does not return");
 	return 0;
 }
 
@@ -441,6 +497,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		break;
 	case SYS_env_set_pgfault_upcall:
 		return sys_env_set_pgfault_upcall(a1, (void *)a2);
+		break;
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send(a1, a2, (void *)a3, a4);
+		break;
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void *)a1);
 		break;
 	default:
 		return -E_INVAL;
